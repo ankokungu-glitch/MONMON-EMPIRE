@@ -4,6 +4,97 @@
 
 document.addEventListener('DOMContentLoaded', () => {
 
+  /* ---------- Accessibility scale ---------- */
+  const scaleLevels = [
+    { name: 'compact', label: 'Compact', value: 0.82 },
+    { name: 'small', label: 'Small', value: 0.92 },
+    { name: 'default', label: 'Default', value: 1 },
+    { name: 'large', label: 'Large', value: 1.15 }
+  ];
+  const scaleStorageKey = 'monmon-ui-scale';
+  const accessibilityTools = document.querySelector('.accessibility-tools');
+  const accessibilityToggle = document.getElementById('accessibilityToggle');
+  const accessibilityPanel = document.getElementById('accessibilityPanel');
+  const scaleStatus = document.getElementById('scaleStatus');
+  let savedScale = null;
+
+  try {
+    savedScale = localStorage.getItem(scaleStorageKey);
+  } catch {
+    savedScale = null;
+  }
+
+  let hasSavedScale = scaleLevels.some(level => level.name === savedScale);
+  const automaticScale = () => {
+    if (window.matchMedia('(max-width: 600px)').matches) return 'compact';
+    if (window.matchMedia('(max-width: 1024px)').matches) return 'small';
+    return 'default';
+  };
+  let currentScale = hasSavedScale ? savedScale : automaticScale();
+
+  const applyScale = (name, persist = true) => {
+    const level = scaleLevels.find(item => item.name === name) || scaleLevels[0];
+    currentScale = level.name;
+    document.documentElement.style.setProperty('--ui-scale', String(level.value));
+    document.documentElement.dataset.uiScale = level.name;
+    if (scaleStatus) scaleStatus.textContent = `${level.label} scale`;
+    if (persist) {
+      try {
+        localStorage.setItem(scaleStorageKey, level.name);
+        hasSavedScale = true;
+      } catch {
+        hasSavedScale = false;
+      }
+    }
+  };
+
+  applyScale(currentScale, false);
+
+  if (accessibilityToggle && accessibilityPanel && accessibilityTools) {
+    let panelCloseTimer;
+    const setPanelOpen = (isOpen) => {
+      window.clearTimeout(panelCloseTimer);
+      accessibilityToggle.setAttribute('aria-expanded', String(isOpen));
+      if (isOpen) {
+        accessibilityPanel.hidden = false;
+        requestAnimationFrame(() => accessibilityPanel.classList.add('is-open'));
+      } else {
+        accessibilityPanel.classList.remove('is-open');
+        panelCloseTimer = window.setTimeout(() => {
+          if (!accessibilityPanel.classList.contains('is-open')) accessibilityPanel.hidden = true;
+        }, 200);
+      }
+    };
+
+    accessibilityToggle.addEventListener('click', () => {
+      setPanelOpen(accessibilityToggle.getAttribute('aria-expanded') !== 'true');
+    });
+    document.getElementById('scaleDown')?.addEventListener('click', () => {
+      const index = scaleLevels.findIndex(level => level.name === currentScale);
+      applyScale(scaleLevels[Math.max(0, index - 1)].name);
+    });
+    document.getElementById('scaleDefault')?.addEventListener('click', () => applyScale('default'));
+    document.getElementById('scaleUp')?.addEventListener('click', () => {
+      const index = scaleLevels.findIndex(level => level.name === currentScale);
+      applyScale(scaleLevels[Math.min(scaleLevels.length - 1, index + 1)].name);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && accessibilityToggle.getAttribute('aria-expanded') === 'true') {
+        setPanelOpen(false);
+        accessibilityToggle.focus();
+      }
+    });
+    document.addEventListener('click', (event) => {
+      if (!accessibilityTools.contains(event.target) && accessibilityToggle.getAttribute('aria-expanded') === 'true') {
+        setPanelOpen(false);
+      }
+    });
+  }
+
+  window.addEventListener('resize', () => {
+    if (!hasSavedScale) applyScale(automaticScale(), false);
+  });
+
   /* ---------- Mobile menu ---------- */
   const menuToggle = document.getElementById('menuToggle');
   const navLinks = document.getElementById('navLinks');
@@ -11,11 +102,13 @@ document.addEventListener('DOMContentLoaded', () => {
   if (menuToggle && navLinks) {
     const setMenuOpen = (isOpen) => {
       navLinks.classList.toggle('open', isOpen);
-      navLinks.setAttribute('aria-hidden', String(!isOpen));
+      navLinks.setAttribute('aria-hidden', String(!isOpen && window.innerWidth <= 860));
       menuToggle.classList.toggle('open', isOpen);
       menuToggle.setAttribute('aria-expanded', String(isOpen));
       menuToggle.setAttribute('aria-label', isOpen ? 'Close navigation menu' : 'Open navigation menu');
     };
+
+    navLinks.setAttribute('aria-hidden', String(window.innerWidth <= 860));
 
     menuToggle.addEventListener('click', () => {
       setMenuOpen(!navLinks.classList.contains('open'));
