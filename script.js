@@ -4,51 +4,62 @@
 
 document.addEventListener('DOMContentLoaded', () => {
 
-  /* ---------- Accessibility scale ---------- */
-  const scaleLevels = [
-    { name: 'compact', label: 'Compact', value: 0.82 },
-    { name: 'small', label: 'Small', value: 0.92 },
-    { name: 'default', label: 'Default', value: 1 },
-    { name: 'large', label: 'Large', value: 1.15 }
+  /* ---------- Accessibility settings ---------- */
+  const settingsStorageKey = 'monmon-accessibility-settings';
+  const textSizeOptions = [
+    { name: 'a', value: 1 },
+    { name: 'a-plus', value: 1.1 },
+    { name: 'a-double-plus', value: 1.2 }
   ];
-  const scaleStorageKey = 'monmon-ui-scale';
+  const defaultSettings = {
+    textSize: 'a',
+    highContrast: false,
+    reduceMotion: false,
+    underlineLinks: false
+  };
+  let settings = { ...defaultSettings };
   const accessibilityTools = document.querySelector('.accessibility-tools');
   const accessibilityToggle = document.getElementById('accessibilityToggle');
   const accessibilityPanel = document.getElementById('accessibilityPanel');
-  const scaleStatus = document.getElementById('scaleStatus');
-  let savedScale = null;
 
   try {
-    savedScale = localStorage.getItem(scaleStorageKey);
+    const savedSettings = JSON.parse(localStorage.getItem(settingsStorageKey));
+    if (savedSettings && typeof savedSettings === 'object') {
+      settings = {
+        textSize: textSizeOptions.some(option => option.name === savedSettings.textSize) ? savedSettings.textSize : 'a',
+        highContrast: savedSettings.highContrast === true,
+        reduceMotion: savedSettings.reduceMotion === true,
+        underlineLinks: savedSettings.underlineLinks === true
+      };
+    }
   } catch {
-    savedScale = null;
+    settings = { ...defaultSettings };
   }
 
-  let hasSavedScale = scaleLevels.some(level => level.name === savedScale);
-  const automaticScale = () => {
-    if (window.matchMedia('(max-width: 600px)').matches) return 'compact';
-    if (window.matchMedia('(max-width: 1024px)').matches) return 'small';
-    return 'default';
-  };
-  let currentScale = hasSavedScale ? savedScale : automaticScale();
-
-  const applyScale = (name, persist = true) => {
-    const level = scaleLevels.find(item => item.name === name) || scaleLevels[0];
-    currentScale = level.name;
-    document.documentElement.style.setProperty('--ui-scale', String(level.value));
-    document.documentElement.dataset.uiScale = level.name;
-    if (scaleStatus) scaleStatus.textContent = `${level.label} scale`;
+  const applySettings = (persist = true) => {
+    const textSize = textSizeOptions.find(option => option.name === settings.textSize) || textSizeOptions[0];
+    const root = document.documentElement;
+    root.style.setProperty('--text-scale', String(textSize.value));
+    root.dataset.textSize = textSize.name;
+    root.dataset.highContrast = String(settings.highContrast);
+    root.dataset.reduceMotion = String(settings.reduceMotion);
+    root.dataset.underlineLinks = String(settings.underlineLinks);
+    document.querySelectorAll('[data-text-size]').forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.textSize === textSize.name));
+    });
+    document.getElementById('highContrast').setAttribute('aria-checked', String(settings.highContrast));
+    document.getElementById('reduceMotion').setAttribute('aria-checked', String(settings.reduceMotion));
+    document.getElementById('underlineLinks').setAttribute('aria-checked', String(settings.underlineLinks));
     if (persist) {
       try {
-        localStorage.setItem(scaleStorageKey, level.name);
-        hasSavedScale = true;
+        localStorage.setItem(settingsStorageKey, JSON.stringify(settings));
       } catch {
-        hasSavedScale = false;
+        // Preferences remain active for this page even if storage is unavailable.
       }
     }
   };
 
-  applyScale(currentScale, false);
+  applySettings(false);
 
   if (accessibilityToggle && accessibilityPanel && accessibilityTools) {
     let panelCloseTimer;
@@ -69,14 +80,27 @@ document.addEventListener('DOMContentLoaded', () => {
     accessibilityToggle.addEventListener('click', () => {
       setPanelOpen(accessibilityToggle.getAttribute('aria-expanded') !== 'true');
     });
-    document.getElementById('scaleDown')?.addEventListener('click', () => {
-      const index = scaleLevels.findIndex(level => level.name === currentScale);
-      applyScale(scaleLevels[Math.max(0, index - 1)].name);
+    document.querySelectorAll('[data-text-size]').forEach(button => {
+      button.addEventListener('click', () => {
+        settings.textSize = button.dataset.textSize;
+        applySettings();
+      });
     });
-    document.getElementById('scaleDefault')?.addEventListener('click', () => applyScale('default'));
-    document.getElementById('scaleUp')?.addEventListener('click', () => {
-      const index = scaleLevels.findIndex(level => level.name === currentScale);
-      applyScale(scaleLevels[Math.min(scaleLevels.length - 1, index + 1)].name);
+    document.getElementById('highContrast').addEventListener('click', () => {
+      settings.highContrast = !settings.highContrast;
+      applySettings();
+    });
+    document.getElementById('reduceMotion').addEventListener('click', () => {
+      settings.reduceMotion = !settings.reduceMotion;
+      applySettings();
+    });
+    document.getElementById('underlineLinks').addEventListener('click', () => {
+      settings.underlineLinks = !settings.underlineLinks;
+      applySettings();
+    });
+    document.getElementById('accessibilityReset').addEventListener('click', () => {
+      settings = { ...defaultSettings };
+      applySettings();
     });
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && accessibilityToggle.getAttribute('aria-expanded') === 'true') {
@@ -90,10 +114,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-
-  window.addEventListener('resize', () => {
-    if (!hasSavedScale) applyScale(automaticScale(), false);
-  });
 
   /* ---------- Mobile menu ---------- */
   const menuToggle = document.getElementById('menuToggle');
